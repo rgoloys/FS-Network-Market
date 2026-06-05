@@ -9,15 +9,16 @@ const Products = () => {
           <span className="inline-flex min-h-[34px] items-center rounded-full border border-[#dedede] bg-white px-3.5 text-sm font-semibold leading-none text-[#5b5b5b]">
             Products
           </span>
-          <h1 className="m-0 text-[52px] font-bold leading-[1.08] tracking-normal text-[#111111] max-[760px]:text-4xl max-[560px]:text-[32px]">
-            Browse the full product collection.
-          </h1>
+          <h5 className="m-0 text-[52px] font-bold leading-[1.08] tracking-normal text-[#111111] max-[760px]:text-4xl max-[560px]:text-[32px]">
+            Dare to Compare Our Best Network Solution.
+          </h5>
           <p className="m-0 max-w-[620px] text-lg leading-[1.65] text-[#626262] max-[560px]:text-base">
-            Compare shop tools, open product details, and choose the option that fits your team.
+            Compare shop tools, open product details, and choose the option that
+            fits your team.
           </p>
         </div>
       </section>
-      <ProductList title="All products" showHeader={false} />
+      <ProductList title="All products" showFilters />
     </PageLayout>
   );
 };

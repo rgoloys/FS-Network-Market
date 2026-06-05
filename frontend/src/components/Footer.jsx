@@ -1,9 +1,25 @@
+import { useContext } from "react";
 import { Link } from "react-router-dom";
 import marketLogo from "../assets/fs-network-market-logo.svg";
+import { AuthContext } from "../context/AuthContext";
 
 const socialLinks = ["X", "In", "Fb"];
 
 const Footer = () => {
+  const { isAuthenticated } = useContext(AuthContext);
+  const accountLinks = isAuthenticated
+    ? [
+        { label: "Profile", to: "/profile" },
+        { label: "Wishlist", to: "/wishlist" },
+        { label: "Orders", to: "/orders" },
+        { label: "Cart", to: "/cart" },
+      ]
+    : [
+        { label: "Log in", to: "/login" },
+        { label: "Register", to: "/register" },
+        { label: "Cart", to: "/cart" },
+      ];
+
   return (
     <footer className="box-border w-full bg-[#111111] px-16 pb-8 pt-16 font-sans text-white max-[960px]:px-7 max-[960px]:pt-14 max-[560px]:px-4 max-[560px]:pb-6 max-[560px]:pt-12">
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-12">
@@ -21,15 +37,26 @@ const Footer = () => {
               />
             </Link>
           </div>
-          <Link
-            className="inline-flex items-center gap-3 whitespace-nowrap text-2xl font-bold leading-none text-white no-underline"
-            to="/"
-          >
+          <div className="flex flex-col gap-6 text-left">
             <p className="m-0 text-base font-normal leading-[1.7] text-white/65">
               Compare dependable switches, routers, firewalls, and access
               points for every network deployment.
             </p>
-          </Link>
+            <nav
+              aria-label="Footer account links"
+              className="flex flex-wrap items-center gap-3"
+            >
+              {accountLinks.map((link) => (
+                <Link
+                  className="button-hover inline-flex min-h-10 items-center rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold leading-none text-white no-underline hover:bg-white/15"
+                  key={link.to}
+                  to={link.to}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-6 border-t border-white/10 pt-7 max-[680px]:flex-col max-[680px]:items-start">

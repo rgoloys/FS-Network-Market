@@ -13,6 +13,8 @@ const signedInNavItems = [
   { label: "Home", to: "/" },
   { label: "Products", to: "/products" },
   { label: "Cart", to: "/cart" },
+  { label: "Wishlist", to: "/wishlist" },
+  { label: "Orders", to: "/orders" },
 ];
 
 const Header = () => {

@@ -1,5 +1,6 @@
 import axios from "axios";
 import { BASE_URL } from "./base";
+import { getAuthHeaders } from "./auth";
 
 let productListCache = null;
 let productListRequest = null;
@@ -18,21 +19,45 @@ export const getProductImageUrl = (image) => {
   return `${BASE_URL}${image}`;
 };
 
-export const getProducts = async () => {
-  if (productListCache) return productListCache;
-  if (productListRequest) return productListRequest;
+const buildQueryString = (params = {}) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      query.set(key, String(value).trim());
+    }
+  });
+
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
+};
+
+export const getProducts = async (params = {}) => {
+  const queryString = buildQueryString(params);
+  if (queryString) {
+    const response = await axios.get(`${BASE_URL}products/${queryString}`);
+    return response.data;
+  }
+
+  if (!queryString && productListCache) return productListCache;
+  if (!queryString && productListRequest) return productListRequest;
 
   productListRequest = axios
     .get(`${BASE_URL}products/`)
     .then((response) => {
-      productListCache = response.data;
-      return productListCache;
+      if (!queryString) productListCache = response.data;
+      return response.data;
     })
     .finally(() => {
       productListRequest = null;
     });
 
   return productListRequest;
+};
+
+export const getProductFilters = async () => {
+  const response = await axios.get(`${BASE_URL}products/filters/`);
+  return response.data;
 };
 
 export const getProductById = async (id) => {
@@ -42,5 +67,21 @@ export const getProductById = async (id) => {
   if (cachedProduct) return cachedProduct;
 
   const response = await axios.get(`${BASE_URL}products/${id}/`);
+  return response.data;
+};
+
+export const getProductReviews = async (id) => {
+  const response = await axios.get(`${BASE_URL}products/${id}/reviews/`, {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+export const submitProductReview = async (id, review) => {
+  const response = await axios.post(
+    `${BASE_URL}products/${id}/reviews/`,
+    review,
+    { headers: getAuthHeaders() },
+  );
   return response.data;
 };

@@ -1,7 +1,6 @@
 import axios from "axios";
 import { useContext, useState } from "react";
-import { Link } from "react-router-dom";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { BASE_URL } from "../api/base";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
@@ -33,7 +32,7 @@ const Login = () => {
       localStorage.setItem("accessToken", response.data.access);
       localStorage.setItem("refreshToken", response.data.refresh);
       setIsAuthenticated(true);
-      navigate("/profile");
+      navigate(location.state?.from ?? "/products");
     } catch (err) {
       const apiMessage =
         err.response?.data?.detail || "Invalid username or password.";

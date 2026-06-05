@@ -1,28 +1,10 @@
-import axios from "axios";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BASE_URL } from "../api/base";
+import { clearAuthTokens, getAccessToken, isUnauthorizedError } from "../api/auth";
+import { getCart, removeCartItem, updateCartItem } from "../api/commerce";
+import { formatProductPrice, getProductImageUrl } from "../api/products";
 import PageLayout from "../components/PageLayout";
 import { AuthContext } from "../context/AuthContext";
-
-const getImageUrl = (image) => {
-  if (!image) return "";
-  if (image.startsWith("http")) return image;
-  if (image.startsWith("/")) return `${BASE_URL.slice(0, -1)}${image}`;
-  return `${BASE_URL}${image}`;
-};
-
-const getAuthHeaders = () => {
-  const accessToken = localStorage.getItem("accessToken");
-  return {
-    Authorization: `Bearer ${accessToken}`,
-  };
-};
-
-const formatPrice = (value) => {
-  const price = Number(value ?? 0);
-  return price.toFixed(2);
-};
 
 const Cart = () => {
   const { setIsAuthenticated } = useContext(AuthContext);
@@ -33,45 +15,49 @@ const Cart = () => {
   const [updatingItemId, setUpdatingItemId] = useState(null);
 
   const clearSessionAndRedirect = useCallback(() => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+    clearAuthTokens();
     setIsAuthenticated(false);
-    navigate("/login");
+    navigate("/login", {
+      state: { message: "Please log in again to continue shopping." },
+    });
   }, [navigate, setIsAuthenticated]);
 
   useEffect(() => {
-    const accessToken = localStorage.getItem("accessToken");
-
-    if (!accessToken) {
-      navigate("/login");
+    if (!getAccessToken()) {
+      navigate("/login", {
+        state: { message: "Please log in to access your cart." },
+      });
       return;
     }
 
-    const fetchCart = async () => {
-      try {
-        const response = await axios.get(`${BASE_URL}cart/`, {
-          headers: getAuthHeaders(),
-        });
-        setCartItems(response.data);
-      } catch (err) {
-        if (err.response?.status === 401) {
+    let isActive = true;
+
+    getCart()
+      .then((data) => {
+        if (isActive) setCartItems(data);
+      })
+      .catch((err) => {
+        if (isUnauthorizedError(err)) {
           clearSessionAndRedirect();
           return;
         }
 
-        setError("Unable to load your cart. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+        if (isActive) setError("Unable to load your cart. Please try again.");
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
 
-    fetchCart();
+    return () => {
+      isActive = false;
+    };
   }, [clearSessionAndRedirect, navigate]);
 
   const cartTotal = useMemo(
     () =>
       cartItems.reduce((total, item) => {
-        return total + Number(item.product?.product_price ?? 0) * item.qty;
+        const price = Number(item.product?.sale_price ?? item.product?.product_price ?? 0);
+        return total + price * item.qty;
       }, 0),
     [cartItems],
   );
@@ -83,24 +69,20 @@ const Cart = () => {
     setUpdatingItemId(cartItem.id);
 
     try {
-      const response = await axios.patch(
-        `${BASE_URL}cart/update/${cartItem.id}/`,
-        { qty: nextQty },
-        { headers: getAuthHeaders() },
-      );
-
+      const updatedItem = await updateCartItem(cartItem.id, nextQty);
       setCartItems((currentItems) =>
-        currentItems.map((item) =>
-          item.id === cartItem.id ? response.data : item,
-        ),
+        currentItems.map((item) => (item.id === cartItem.id ? updatedItem : item)),
       );
     } catch (err) {
-      if (err.response?.status === 401) {
+      if (isUnauthorizedError(err)) {
         clearSessionAndRedirect();
         return;
       }
 
-      setError("Unable to update this item. Please try again.");
+      setError(
+        err.response?.data?.error ??
+          "Unable to update this item. Please try again.",
+      );
     } finally {
       setUpdatingItemId(null);
     }
@@ -111,15 +93,12 @@ const Cart = () => {
     setUpdatingItemId(cartItemId);
 
     try {
-      await axios.delete(`${BASE_URL}cart/remove/${cartItemId}/`, {
-        headers: getAuthHeaders(),
-      });
-
+      await removeCartItem(cartItemId);
       setCartItems((currentItems) =>
         currentItems.filter((item) => item.id !== cartItemId),
       );
     } catch (err) {
-      if (err.response?.status === 401) {
+      if (isUnauthorizedError(err)) {
         clearSessionAndRedirect();
         return;
       }
@@ -186,9 +165,12 @@ const Cart = () => {
               <div className="flex flex-col gap-4">
                 {cartItems.map((item) => {
                   const product = item.product;
-                  const unitPrice = Number(product?.product_price ?? 0);
+                  const unitPrice = Number(
+                    product?.sale_price ?? product?.product_price ?? 0,
+                  );
                   const lineTotal = unitPrice * item.qty;
                   const isUpdating = updatingItemId === item.id;
+                  const stockCount = Number(product?.countInStock ?? 0);
 
                   return (
                     <article
@@ -198,8 +180,8 @@ const Cart = () => {
                       <div className="flex min-h-[112px] items-center justify-center overflow-hidden rounded-lg bg-[#f2f2f2]">
                         {product?.image ? (
                           <img
-                            className="h-full max-h-[112px] w-full object-cover"
-                            src={getImageUrl(product.image)}
+                            className="h-full max-h-[112px] w-full object-contain p-2"
+                            src={getProductImageUrl(product.image)}
                             alt={product.product_name}
                           />
                         ) : (
@@ -212,14 +194,17 @@ const Cart = () => {
                       <div className="flex min-w-0 flex-col gap-3">
                         <div>
                           <p className="m-0 text-sm font-semibold leading-none text-[#6b6b6b]">
-                            {product?.brand}
+                            {product?.brand} / {product?.category}
                           </p>
                           <h2 className="m-0 mt-2 text-2xl font-bold leading-[1.15] text-[#111111]">
                             {product?.product_name}
                           </h2>
                         </div>
                         <p className="m-0 text-base font-semibold text-[#626262]">
-                          Unit price: {formatPrice(unitPrice)}
+                          Unit price: {formatProductPrice(unitPrice)}
+                        </p>
+                        <p className="m-0 text-sm font-semibold text-[#6f7774]">
+                          {stockCount} item(s) available
                         </p>
                         <div className="flex flex-wrap items-center gap-3">
                           <button
@@ -237,7 +222,7 @@ const Cart = () => {
                           </span>
                           <button
                             className="inline-flex size-10 cursor-pointer items-center justify-center rounded-lg border border-[#d9d9d9] bg-white text-lg font-bold text-[#141414] disabled:cursor-not-allowed disabled:text-[#9a9a9a]"
-                            disabled={isUpdating}
+                            disabled={isUpdating || item.qty >= stockCount}
                             onClick={() =>
                               handleUpdateQuantity(item, item.qty + 1)
                             }
@@ -261,7 +246,7 @@ const Cart = () => {
                           Line total
                         </span>
                         <span className="text-2xl font-bold text-[#111111]">
-                          {formatPrice(lineTotal)}
+                          {formatProductPrice(lineTotal)}
                         </span>
                       </div>
                     </article>
@@ -275,12 +260,18 @@ const Cart = () => {
                 </h2>
                 <div className="mt-6 flex items-center justify-between border-t border-[#e8e8e8] pt-5">
                   <span className="text-base font-semibold text-[#626262]">
-                    Total
+                    Subtotal
                   </span>
                   <span className="text-3xl font-bold text-[#111111]">
-                    {formatPrice(cartTotal)}
+                    {formatProductPrice(cartTotal)}
                   </span>
                 </div>
+                <Link
+                  className="button-hover mt-6 inline-flex min-h-[48px] w-full items-center justify-center rounded-lg bg-[#141414] px-5 text-sm font-bold leading-none text-white no-underline"
+                  to="/checkout"
+                >
+                  Checkout
+                </Link>
               </aside>
             </div>
           ) : null}

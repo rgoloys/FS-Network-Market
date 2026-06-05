@@ -1,13 +1,23 @@
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import password_changed, validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Avg
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .models import CartUser, Prodct, UserProfile
+from .models import (
+    CartUser,
+    Order,
+    OrderItem,
+    Prodct,
+    ProductReview,
+    UserProfile,
+    WishlistItem,
+)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -38,9 +48,43 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email']
 
 class ProdctSerializer(serializers.ModelSerializer):
+    average_rating = serializers.SerializerMethodField()
+    review_count = serializers.SerializerMethodField()
+    sale_price = serializers.SerializerMethodField()
+
     class Meta:
         model = Prodct
-        fields = '__all__'
+        fields = [
+            'id',
+            'product_name',
+            'product_price',
+            'brand',
+            'category',
+            'description',
+            'countInStock',
+            'image',
+            'is_featured',
+            'discount_percent',
+            'sale_price',
+            'average_rating',
+            'review_count',
+            'createdAt',
+        ]
+
+    def get_average_rating(self, obj):
+        rating = obj.reviews.aggregate(value=Avg('rating'))['value']
+        return round(rating, 1) if rating else 0
+
+    def get_review_count(self, obj):
+        return obj.reviews.count()
+
+    def get_sale_price(self, obj):
+        discount = Decimal(obj.discount_percent or 0)
+        price = Decimal(obj.product_price or 0)
+        if discount <= 0:
+            return str(price)
+        sale_price = price * (Decimal('100') - discount) / Decimal('100')
+        return str(sale_price.quantize(Decimal('0.01')))
 
 
 class CartUserSerializer(serializers.ModelSerializer):
@@ -55,6 +99,88 @@ class CartUserSerializer(serializers.ModelSerializer):
             'product_id',
             'qty',
         ]
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product = ProdctSerializer(read_only=True)
+
+    class Meta:
+        model = OrderItem
+        fields = [
+            'id',
+            'product',
+            'product_name',
+            'brand',
+            'unit_price',
+            'qty',
+            'line_total',
+        ]
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            'id',
+            'status',
+            'payment_status',
+            'shipping_full_name',
+            'shipping_email',
+            'shipping_phone_number',
+            'shipping_country',
+            'shipping_city_province',
+            'shipping_address',
+            'shipping_postal_code',
+            'subtotal',
+            'shipping_fee',
+            'tax_amount',
+            'discount_amount',
+            'total_amount',
+            'items',
+            'createdAt',
+            'updatedAt',
+        ]
+        read_only_fields = fields
+
+
+class WishlistItemSerializer(serializers.ModelSerializer):
+    product = ProdctSerializer(read_only=True)
+    product_id = serializers.IntegerField(write_only=True)
+
+    class Meta:
+        model = WishlistItem
+        fields = ['id', 'product', 'product_id', 'createdAt']
+
+
+class ProductReviewSerializer(serializers.ModelSerializer):
+    user_display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductReview
+        fields = [
+            'id',
+            'rating',
+            'comment',
+            'user_display_name',
+            'createdAt',
+            'updatedAt',
+        ]
+        read_only_fields = ['id', 'user_display_name', 'createdAt', 'updatedAt']
+
+    def get_user_display_name(self, obj):
+        profile = getattr(obj.user, 'profile', None)
+        if profile and profile.display_name:
+            return profile.display_name
+        if profile and profile.full_name:
+            return profile.full_name
+        return obj.user.username
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError('Rating must be between 1 and 5.')
+        return value
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
