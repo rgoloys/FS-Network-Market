@@ -1,5 +1,14 @@
 from django.contrib import admin
-from .models import Order, OrderItem, Prodct, ProductReview, UserProfile, WishlistItem
+from .models import (
+    Order,
+    OrderItem,
+    Prodct,
+    ProductReview,
+    UserProfile,
+    WishlistItem,
+    paymentMethod,
+    shippingAddress,
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -64,3 +73,36 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'role', 'full_name', 'display_name', 'country')
     list_filter = ('role', 'gender', 'country')
     search_fields = ('user__username', 'user__email', 'full_name', 'display_name')
+
+
+@admin.register(paymentMethod)
+class PaymentMethodAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user',
+        'order',
+        'totalPrice',
+        'isPaid',
+        'xendit_status',
+        'paidAt',
+    )
+    list_filter = ('isPaid', 'xendit_status', 'paidAt')
+    search_fields = (
+        'user__username',
+        'user__email',
+        'order__id',
+        'xendit_invoice_id',
+        'xendit_external_id',
+    )
+
+
+@admin.register(shippingAddress)
+class ShippingAddressAdmin(admin.ModelAdmin):
+    list_display = ('fullName', 'city', 'country', 'paymentId')
+    search_fields = (
+        'fullName',
+        'city',
+        'country',
+        'paymentId__user__username',
+        'paymentId__xendit_external_id',
+    )

@@ -17,6 +17,8 @@ from .models import (
     ProductReview,
     UserProfile,
     WishlistItem,
+    paymentMethod,
+    shippingAddress,
 )
 
 
@@ -148,6 +150,39 @@ class OrderSerializer(serializers.ModelSerializer):
             'items',
             'createdAt',
             'updatedAt',
+        ]
+        read_only_fields = fields
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    order_id = serializers.IntegerField(source='order.id', read_only=True)
+
+    class Meta:
+        model = paymentMethod
+        fields = [
+            'id',
+            'order_id',
+            'totalPrice',
+            'isPaid',
+            'paidAt',
+            'xendit_invoice_id',
+            'xendit_external_id',
+            'xendit_status',
+        ]
+        read_only_fields = fields
+
+
+class ShippingAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = shippingAddress
+        fields = [
+            'id',
+            'paymentId',
+            'fullName',
+            'address',
+            'city',
+            'postalCode',
+            'country',
         ]
         read_only_fields = fields
 

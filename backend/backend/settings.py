@@ -67,10 +67,10 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
+    "http://localhost:5173",
+    "https://fs-network-market.vercel.app",
     "https://fs-network-market-i1ph58e93-goloya-s-projects.vercel.app",
     "https://fs-network-market-git-main-goloya-s-projects.vercel.app",
-    "https://fs-network-market.vercel.app",
 ]
 
 ROOT_URLCONF = 'backend.urls'

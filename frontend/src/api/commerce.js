@@ -43,6 +43,15 @@ export const createOrder = async (shipping) => {
   return response.data;
 };
 
+export const createXenditCheckout = async (shipping) => {
+  const response = await axios.post(
+    `${BASE_URL}payments/xendit/checkout/`,
+    { shipping },
+    { headers: getAuthHeaders() },
+  );
+  return response.data;
+};
+
 export const getOrders = async () => {
   const response = await axios.get(`${BASE_URL}orders/`, {
     headers: getAuthHeaders(),

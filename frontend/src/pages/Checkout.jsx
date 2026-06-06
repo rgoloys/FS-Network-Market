@@ -3,7 +3,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BASE_URL } from "../api/base";
 import { clearAuthTokens, getAuthHeaders, isUnauthorizedError } from "../api/auth";
-import { createOrder, getCart } from "../api/commerce";
+import { createXenditCheckout, getCart } from "../api/commerce";
 import { formatProductPrice } from "../api/products";
 import PageLayout from "../components/PageLayout";
 import { AuthContext } from "../context/AuthContext";
@@ -117,10 +117,11 @@ const Checkout = () => {
     setIsSubmitting(true);
 
     try {
-      const order = await createOrder(shipping);
-      navigate(`/orders/${order.id}`, {
-        state: { message: "Order placed successfully." },
-      });
+      const checkout = await createXenditCheckout(shipping);
+      if (!checkout.invoice_url) {
+        throw new Error("The payment provider did not return a checkout link.");
+      }
+      window.location.assign(checkout.invoice_url);
     } catch (err) {
       if (isUnauthorizedError(err)) {
         clearSessionAndRedirect();
@@ -130,7 +131,12 @@ const Checkout = () => {
       if (err.response?.data && typeof err.response.data === "object") {
         setFieldErrors(err.response.data);
       }
-      setError(getErrorText(err.response?.data, "Unable to place this order."));
+      setError(
+        getErrorText(
+          err.response?.data,
+          err.message || "Unable to create the payment checkout.",
+        ),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -242,7 +248,7 @@ const Checkout = () => {
                   disabled={isSubmitting}
                   type="submit"
                 >
-                  {isSubmitting ? "Placing order..." : "Place order"}
+                  {isSubmitting ? "Creating payment..." : "Proceed to payment"}
                 </button>
               </form>
 

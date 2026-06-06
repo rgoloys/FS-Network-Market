@@ -1,3 +1,9 @@
+import base64
+import json
+import os
+import urllib.error
+import urllib.request
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.models import User
@@ -17,6 +23,8 @@ from .models import (
     ProductReview,
     UserProfile,
     WishlistItem,
+    paymentMethod,
+    shippingAddress,
 )
 from .permissions import IsBusinessUser
 from .serializers import (
@@ -27,16 +35,19 @@ from .serializers import (
     MeSerializer,
     OrderSerializer,
     PasswordChangeSerializer,
+    PaymentMethodSerializer,
     ProdctSerializer,
     ProductReviewSerializer,
     ProfilePhotoSerializer,
     RegisterSerializer,
+    ShippingAddressSerializer,
     UserProfileSerializer,
     UserSerializer,
     WishlistItemSerializer,
 )
 
 MONEY_QUANTIZER = Decimal('0.01')
+XENDIT_INVOICE_URL = 'https://api.xendit.co/v2/invoices'
 
 
 def parse_qty(value):
@@ -365,6 +376,298 @@ def get_shipping_payload(request, profile):
             errors[key] = 'This field is required.'
 
     return payload, errors
+
+
+def get_frontend_base_url():
+    return os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
+
+
+def get_xendit_invoice_payload(data):
+    if isinstance(data, dict) and isinstance(data.get('data'), dict):
+        return data['data']
+    return data if isinstance(data, dict) else {}
+
+
+def create_xendit_invoice(payment, order):
+    secret_key = os.getenv('XENDIT_SECRET_KEY', '').strip()
+    if not secret_key:
+        raise RuntimeError('Xendit secret key is not configured.')
+
+    frontend_base_url = get_frontend_base_url()
+    payload = {
+        'external_id': payment.xendit_external_id,
+        'amount': float(order.total_amount),
+        'payer_email': order.shipping_email,
+        'description': f'FS Network Market Order #{order.id}',
+        'success_redirect_url': (
+            f'{frontend_base_url}/payment/success?order_id={order.id}'
+        ),
+        'failure_redirect_url': (
+            f'{frontend_base_url}/payment/failed?order_id={order.id}'
+        ),
+    }
+    body = json.dumps(payload).encode('utf-8')
+    auth_token = base64.b64encode(f'{secret_key}:'.encode('utf-8')).decode('utf-8')
+    request = urllib.request.Request(
+        XENDIT_INVOICE_URL,
+        data=body,
+        method='POST',
+        headers={
+            'Authorization': f'Basic {auth_token}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+    )
+
+    with urllib.request.urlopen(request, timeout=20) as response:
+        response_body = response.read().decode('utf-8')
+        return json.loads(response_body)
+
+
+def restore_order_stock_once(order):
+    if order.status == Order.STATUS_CANCELLED:
+        return
+
+    for order_item in order.items.select_related('product'):
+        product = order_item.product
+        product.countInStock += order_item.qty
+        product.save(update_fields=['countInStock'])
+
+    order.status = Order.STATUS_CANCELLED
+    order.payment_status = Order.PAYMENT_FAILED
+    order.save(update_fields=['status', 'payment_status', 'updatedAt'])
+
+
+def close_failed_payment(payment, xendit_status_value):
+    with transaction.atomic():
+        payment = (
+            paymentMethod.objects.select_for_update()
+            .select_related('order')
+            .get(id=payment.id)
+        )
+        if payment.isPaid:
+            return payment
+
+        payment.xendit_status = xendit_status_value
+        payment.save(update_fields=['xendit_status'])
+
+        if payment.order_id:
+            restore_order_stock_once(payment.order)
+
+        return payment
+
+
+def create_order_for_xendit_checkout(request, shipping_payload):
+    cart_items = list(get_cart_items(request.user))
+    if not cart_items:
+        return None, {'error': 'Your cart is empty.'}, status.HTTP_400_BAD_REQUEST
+
+    with transaction.atomic():
+        product_ids = [item.product_id for item in cart_items]
+        products = {
+            product.id: product
+            for product in Prodct.objects.select_for_update().filter(id__in=product_ids)
+        }
+
+        subtotal = Decimal('0.00')
+        discount_amount = Decimal('0.00')
+        prepared_items = []
+        stock_errors = {}
+
+        for cart_item in cart_items:
+            product = products.get(cart_item.product_id)
+            if not product:
+                stock_errors[str(cart_item.id)] = 'Product is no longer available.'
+                continue
+            if cart_item.qty > product.countInStock:
+                stock_errors[str(cart_item.id)] = (
+                    f'Only {product.countInStock} item(s) are available for '
+                    f'{product.product_name}.'
+                )
+                continue
+
+            unit_price = get_effective_price(product)
+            line_total = money(unit_price * cart_item.qty)
+            original_total = money(Decimal(product.product_price) * cart_item.qty)
+            subtotal += line_total
+            discount_amount += original_total - line_total
+            prepared_items.append((cart_item, product, unit_price, line_total))
+
+        if stock_errors:
+            return None, {'stock': stock_errors}, status.HTTP_400_BAD_REQUEST
+
+        shipping_fee = Decimal('0.00')
+        tax_amount = Decimal('0.00')
+        total_amount = money(subtotal + shipping_fee + tax_amount)
+        order = Order.objects.create(
+            user=request.user,
+            payment_status=Order.PAYMENT_PENDING,
+            subtotal=money(subtotal),
+            shipping_fee=shipping_fee,
+            tax_amount=tax_amount,
+            discount_amount=money(discount_amount),
+            total_amount=total_amount,
+            **shipping_payload,
+        )
+        order_items = []
+        for cart_item, product, unit_price, line_total in prepared_items:
+            order_items.append(
+                OrderItem(
+                    order=order,
+                    product=product,
+                    product_name=product.product_name,
+                    brand=product.brand,
+                    unit_price=unit_price,
+                    qty=cart_item.qty,
+                    line_total=line_total,
+                )
+            )
+            product.countInStock -= cart_item.qty
+            product.save(update_fields=['countInStock'])
+
+        OrderItem.objects.bulk_create(order_items)
+        external_id = f'fs-network-order-{order.id}-{uuid.uuid4().hex[:12]}'
+        payment = paymentMethod.objects.create(
+            user=request.user,
+            order=order,
+            totalPrice=order.total_amount,
+            xendit_external_id=external_id,
+            xendit_status='PENDING',
+        )
+        saved_shipping = shippingAddress.objects.create(
+            paymentId=payment,
+            fullName=shipping_payload['shipping_full_name'],
+            address=shipping_payload['shipping_address'],
+            city=shipping_payload['shipping_city_province'],
+            postalCode=shipping_payload['shipping_postal_code'],
+            country=shipping_payload['shipping_country'],
+        )
+        invoice = create_xendit_invoice(payment, order)
+        invoice_url = invoice.get('invoice_url')
+        if not invoice_url:
+            raise RuntimeError('Xendit did not return an invoice URL.')
+
+        payment.xendit_invoice_id = invoice.get('id', '')
+        payment.xendit_status = invoice.get('status', 'PENDING')
+        payment.save(
+            update_fields=[
+                'xendit_invoice_id',
+                'xendit_status',
+            ]
+        )
+        CartUser.objects.filter(user=request.user).delete()
+
+    return (
+        {
+            'order': order,
+            'payment': payment,
+            'shipping_address': saved_shipping,
+            'invoice_url': invoice_url,
+        },
+        None,
+        status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([JSONParser])
+def xendit_checkout(request):
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    shipping_payload, shipping_errors = get_shipping_payload(request, profile)
+    if shipping_errors:
+        return Response(shipping_errors, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        checkout, error_data, response_status = create_order_for_xendit_checkout(
+            request,
+            shipping_payload,
+        )
+    except urllib.error.HTTPError as error:
+        error_body = error.read().decode('utf-8', errors='replace')
+        return Response(
+            {
+                'error': 'Unable to create Xendit invoice.',
+                'details': error_body,
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except (urllib.error.URLError, TimeoutError, RuntimeError) as error:
+        return Response(
+            {'error': str(error)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    if error_data:
+        return Response(error_data, status=response_status)
+
+    order = (
+        Order.objects.prefetch_related('items__product')
+        .select_related('user')
+        .get(id=checkout['order'].id)
+    )
+    return Response(
+        {
+            'order': OrderSerializer(order).data,
+            'payment': PaymentMethodSerializer(checkout['payment']).data,
+            'shipping_address': ShippingAddressSerializer(
+                checkout['shipping_address']
+            ).data,
+            'invoice_url': checkout['invoice_url'],
+        },
+        status=response_status,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@parser_classes([JSONParser])
+def xendit_webhook(request):
+    callback_token = os.getenv('XENDIT_WEBHOOK_TOKEN', '').strip()
+    if not callback_token:
+        return Response(
+            {'error': 'Xendit webhook token is not configured.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    received_token = request.headers.get('x-callback-token', '')
+    if received_token != callback_token:
+        return Response(
+            {'error': 'Invalid Xendit callback token.'},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    payload = get_xendit_invoice_payload(request.data)
+    external_id = payload.get('external_id', '')
+    invoice_id = payload.get('id') or payload.get('invoice_id') or ''
+    xendit_status_value = str(payload.get('status', '')).upper()
+
+    payment_query = paymentMethod.objects.select_related('order')
+    payment = None
+    if external_id:
+        payment = payment_query.filter(xendit_external_id=external_id).first()
+    if payment is None and invoice_id:
+        payment = payment_query.filter(xendit_invoice_id=invoice_id).first()
+    if payment is None:
+        return Response({'message': 'Payment record not found.'})
+
+    if invoice_id and not payment.xendit_invoice_id:
+        payment.xendit_invoice_id = invoice_id
+        payment.save(update_fields=['xendit_invoice_id'])
+
+    if xendit_status_value in ['PAID', 'SETTLED']:
+        payment.mark_paid()
+        return Response({'message': 'Payment marked as paid.'})
+
+    if xendit_status_value in ['EXPIRED', 'FAILED', 'CANCELLED']:
+        close_failed_payment(payment, xendit_status_value)
+        return Response({'message': 'Payment closed.'})
+
+    if xendit_status_value:
+        payment.xendit_status = xendit_status_value
+        payment.save(update_fields=['xendit_status'])
+
+    return Response({'message': 'Webhook processed.'})
 
 
 @api_view(['GET', 'POST'])

@@ -12,6 +12,8 @@ import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import OrderDetails from "./pages/OrderDetails";
 import Orders from "./pages/Orders";
+import PaymentFailed from "./pages/PaymentFailed";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import ProductDetails from "./pages/ProductDetails";
 import Products from "./pages/Products";
 import Register from "./pages/Register";
@@ -83,6 +85,8 @@ function App() {
         />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
+        <Route path="/payment/failed" element={<PaymentFailed />} />
         <Route path="/superuser-admin" element={<SuperuserAdmin />} />
         <Route
           path="/business-dashboard"
