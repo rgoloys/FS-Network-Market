@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -96,7 +98,46 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-if os.getenv('DB_HOST'):
+
+def get_database_url_config(database_url):
+    parsed_url = urlparse(database_url)
+    if parsed_url.scheme not in ['postgres', 'postgresql']:
+        raise ImproperlyConfigured(
+            'DATABASE_URL must start with postgres:// or postgresql://.'
+        )
+
+    try:
+        database_port = parsed_url.port or 5432
+    except ValueError as error:
+        raise ImproperlyConfigured(
+            'DATABASE_URL contains an invalid PostgreSQL port.'
+        ) from error
+
+    return {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': unquote(parsed_url.path.lstrip('/')),
+        'USER': unquote(parsed_url.username or ''),
+        'PASSWORD': unquote(parsed_url.password or ''),
+        'HOST': parsed_url.hostname or '',
+        'PORT': database_port,
+    }
+
+
+def get_db_port():
+    db_port = os.getenv('DB_PORT', '5432').strip()
+    if not db_port.isdigit():
+        raise ImproperlyConfigured(
+            f'DB_PORT must be numeric. Current value is {db_port!r}.'
+        )
+    return db_port
+
+
+database_url = os.getenv('DATABASE_URL', '').strip()
+if database_url:
+    DATABASES = {
+        'default': get_database_url_config(database_url),
+    }
+elif os.getenv('DB_HOST'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -104,7 +145,7 @@ if os.getenv('DB_HOST'):
             'USER': os.getenv('DB_USER', ''),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', ''),
-            'PORT': os.getenv('DB_PORT', '5432'),
+            'PORT': get_db_port(),
         }
     }
 else:

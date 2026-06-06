@@ -260,11 +260,7 @@ class paymentMethod(models.Model):
         idempotent.
         """
         with transaction.atomic():
-            payment = (
-                type(self).objects.select_for_update()
-                .select_related('order')
-                .get(id=self.id)
-            )
+            payment = type(self).objects.select_for_update().get(id=self.id)
             if payment.isPaid:
                 self.isPaid = payment.isPaid
                 self.paidAt = payment.paidAt
@@ -277,10 +273,11 @@ class paymentMethod(models.Model):
             payment.save(update_fields=['isPaid', 'paidAt', 'xendit_status'])
 
             if payment.order_id:
-                payment.order.payment_status = Order.PAYMENT_PAID
-                if payment.order.status == Order.STATUS_PENDING:
-                    payment.order.status = Order.STATUS_PROCESSING
-                payment.order.save(update_fields=['payment_status', 'status', 'updatedAt'])
+                order = Order.objects.select_for_update().get(id=payment.order_id)
+                order.payment_status = Order.PAYMENT_PAID
+                if order.status == Order.STATUS_PENDING:
+                    order.status = Order.STATUS_PROCESSING
+                order.save(update_fields=['payment_status', 'status', 'updatedAt'])
 
             self.isPaid = payment.isPaid
             self.paidAt = payment.paidAt
