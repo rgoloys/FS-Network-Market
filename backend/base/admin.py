@@ -28,14 +28,22 @@ class OrderAdmin(admin.ModelAdmin):
 class ProdctAdmin(admin.ModelAdmin):
     list_display = (
         'product_name',
+        'owner',
         'brand',
         'category',
         'product_price',
         'countInStock',
         'is_featured',
+        'is_active',
     )
-    list_filter = ('brand', 'category', 'is_featured')
-    search_fields = ('product_name', 'brand', 'category')
+    list_filter = ('owner', 'brand', 'category', 'is_featured', 'is_active')
+    search_fields = (
+        'product_name',
+        'brand',
+        'category',
+        'owner__username',
+        'owner__email',
+    )
 
 
 @admin.register(WishlistItem)
@@ -46,9 +54,13 @@ class WishlistItemAdmin(admin.ModelAdmin):
 
 @admin.register(ProductReview)
 class ProductReviewAdmin(admin.ModelAdmin):
-    list_display = ('product', 'user', 'rating', 'createdAt')
-    list_filter = ('rating', 'createdAt')
+    list_display = ('product', 'user', 'rating', 'is_visible', 'createdAt')
+    list_filter = ('rating', 'is_visible', 'createdAt')
     search_fields = ('product__product_name', 'user__username')
 
 
-admin.site.register(UserProfile)
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'role', 'full_name', 'display_name', 'country')
+    list_filter = ('role', 'gender', 'country')
+    search_fields = ('user__username', 'user__email', 'full_name', 'display_name')

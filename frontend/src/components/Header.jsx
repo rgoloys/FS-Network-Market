@@ -1,5 +1,6 @@
 import { useContext } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { BASE_URL } from "../api/base";
 import marketLogo from "../assets/fs-network-market-logo.svg";
 import { AuthContext } from "../context/AuthContext";
 
@@ -17,10 +18,29 @@ const signedInNavItems = [
   { label: "Orders", to: "/orders" },
 ];
 
+const businessNavItems = [
+  { label: "Dashboard", to: "/business-dashboard" },
+  { label: "Products", to: "/business-dashboard/products" },
+  { label: "Orders", to: "/business-dashboard/orders" },
+  { label: "Customers", to: "/business-dashboard/customers" },
+  { label: "Reviews", to: "/business-dashboard/reviews" },
+];
+
+const superuserNavItems = [
+  { external: true, label: "Django admin", to: `${BASE_URL}admin/` },
+];
+
 const Header = () => {
-  const { isAuthenticated, setIsAuthenticated } = useContext(AuthContext);
+  const { isAuthenticated, isBusinessUser, isSuperuser, setIsAuthenticated } =
+    useContext(AuthContext);
   const navigate = useNavigate();
-  const navItems = isAuthenticated ? signedInNavItems : guestNavItems;
+  const navItems = isSuperuser
+    ? superuserNavItems
+    : isBusinessUser
+      ? businessNavItems
+      : isAuthenticated
+        ? signedInNavItems
+        : guestNavItems;
 
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
@@ -51,31 +71,57 @@ const Header = () => {
         aria-label="Main menu"
       >
         {navItems.map((item) => (
-          <NavLink
-            className={({ isActive }) =>
-              `relative py-1 text-base font-medium leading-[1.2] no-underline transition-colors duration-200 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:origin-left after:bg-[#141414] after:transition-transform after:duration-200 hover:text-[#141414] hover:after:scale-x-100 focus-visible:text-[#141414] focus-visible:after:scale-x-100 ${
-                isActive
-                  ? "text-[#141414] after:scale-x-100"
-                  : "text-[#5f5f5f] after:scale-x-0"
-              }`
-            }
-            key={item.to}
-            to={item.to}
-          >
-            {item.label}
-          </NavLink>
+          item.external ? (
+            <a
+              className="relative py-1 text-base font-medium leading-[1.2] text-[#5f5f5f] no-underline transition-colors duration-200 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:origin-left after:scale-x-0 after:bg-[#141414] after:transition-transform after:duration-200 hover:text-[#141414] hover:after:scale-x-100 focus-visible:text-[#141414] focus-visible:after:scale-x-100"
+              href={item.to}
+              key={item.to}
+            >
+              {item.label}
+            </a>
+          ) : (
+            <NavLink
+              className={({ isActive }) =>
+                `relative py-1 text-base font-medium leading-[1.2] no-underline transition-colors duration-200 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:origin-left after:bg-[#141414] after:transition-transform after:duration-200 hover:text-[#141414] hover:after:scale-x-100 focus-visible:text-[#141414] focus-visible:after:scale-x-100 ${
+                  isActive
+                    ? "text-[#141414] after:scale-x-100"
+                    : "text-[#5f5f5f] after:scale-x-0"
+                }`
+              }
+              key={item.to}
+              to={item.to}
+            >
+              {item.label}
+            </NavLink>
+          )
         ))}
       </nav>
 
       <div className="flex items-center justify-end gap-3.5 max-[1080px]:ml-auto max-[520px]:gap-3">
         {isAuthenticated ? (
           <>
-            <Link
-              className="whitespace-nowrap px-0.5 py-3 text-[15px] font-semibold leading-none text-[#141414] no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#141414] max-[520px]:flex-1"
-              to="/profile"
-            >
-              Profile
-            </Link>
+            {isSuperuser ? (
+              <a
+                className="whitespace-nowrap px-0.5 py-3 text-[15px] font-semibold leading-none text-[#141414] no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#141414] max-[520px]:flex-1"
+                href={`${BASE_URL}admin/`}
+              >
+                Admin
+              </a>
+            ) : isBusinessUser ? (
+              <Link
+                className="whitespace-nowrap px-0.5 py-3 text-[15px] font-semibold leading-none text-[#141414] no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#141414] max-[520px]:flex-1"
+                to="/business-dashboard"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                className="whitespace-nowrap px-0.5 py-3 text-[15px] font-semibold leading-none text-[#141414] no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#141414] max-[520px]:flex-1"
+                to="/profile"
+              >
+                Profile
+              </Link>
+            )}
             <button
               className="whitespace-nowrap rounded-lg border-0 bg-[#141414] px-[22px] py-[15px] text-[15px] font-semibold leading-none text-white shadow-[0_12px_24px_rgba(20,20,20,0.14)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#141414] max-[520px]:flex-1"
               onClick={handleLogout}

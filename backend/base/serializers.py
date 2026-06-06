@@ -5,7 +5,7 @@ from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import password_changed, validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Avg
+from django.db.models import Avg, Sum
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
@@ -39,13 +39,16 @@ class RegisterSerializer(serializers.ModelSerializer):
             email=validated_data['email'],
             password=validated_data['password'],
         )
-        UserProfile.objects.create(user=user)
+        UserProfile.objects.get_or_create(
+            user=user,
+            defaults={'role': UserProfile.ROLE_BUYER},
+        )
         return user
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email']
+        fields = ['id', 'username', 'email', 'is_active']
 
 class ProdctSerializer(serializers.ModelSerializer):
     average_rating = serializers.SerializerMethodField()
@@ -64,6 +67,7 @@ class ProdctSerializer(serializers.ModelSerializer):
             'countInStock',
             'image',
             'is_featured',
+            'is_active',
             'discount_percent',
             'sale_price',
             'average_rating',
@@ -72,11 +76,13 @@ class ProdctSerializer(serializers.ModelSerializer):
         ]
 
     def get_average_rating(self, obj):
-        rating = obj.reviews.aggregate(value=Avg('rating'))['value']
+        rating = obj.reviews.filter(is_visible=True).aggregate(value=Avg('rating'))[
+            'value'
+        ]
         return round(rating, 1) if rating else 0
 
     def get_review_count(self, obj):
-        return obj.reviews.count()
+        return obj.reviews.filter(is_visible=True).count()
 
     def get_sale_price(self, obj):
         discount = Decimal(obj.discount_percent or 0)
@@ -114,6 +120,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'unit_price',
             'qty',
             'line_total',
+            'fulfillment_status',
         ]
 
 
@@ -145,6 +152,73 @@ class OrderSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class BusinessOrderItemSerializer(serializers.ModelSerializer):
+    product = ProdctSerializer(read_only=True)
+
+    class Meta:
+        model = OrderItem
+        fields = [
+            'id',
+            'product',
+            'product_name',
+            'brand',
+            'unit_price',
+            'qty',
+            'line_total',
+            'fulfillment_status',
+        ]
+        read_only_fields = fields
+
+
+class BusinessOrderSerializer(serializers.ModelSerializer):
+    items = serializers.SerializerMethodField()
+    user = UserSerializer(read_only=True)
+    owned_subtotal = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            'id',
+            'user',
+            'status',
+            'payment_status',
+            'shipping_full_name',
+            'shipping_email',
+            'shipping_phone_number',
+            'shipping_country',
+            'shipping_city_province',
+            'shipping_address',
+            'shipping_postal_code',
+            'subtotal',
+            'shipping_fee',
+            'tax_amount',
+            'discount_amount',
+            'total_amount',
+            'owned_subtotal',
+            'items',
+            'createdAt',
+            'updatedAt',
+        ]
+        read_only_fields = fields
+
+    def _owned_items(self, obj):
+        request = self.context.get('request')
+        items = obj.items.select_related('product')
+        if request and request.user.is_superuser:
+            return items
+        if request and request.user.is_authenticated:
+            return items.filter(product__owner=request.user)
+        return items.none()
+
+    def get_items(self, obj):
+        serializer = BusinessOrderItemSerializer(self._owned_items(obj), many=True)
+        return serializer.data
+
+    def get_owned_subtotal(self, obj):
+        value = self._owned_items(obj).aggregate(total=Sum('line_total'))['total']
+        return str(value or Decimal('0.00'))
+
+
 class WishlistItemSerializer(serializers.ModelSerializer):
     product = ProdctSerializer(read_only=True)
     product_id = serializers.IntegerField(write_only=True)
@@ -163,11 +237,18 @@ class ProductReviewSerializer(serializers.ModelSerializer):
             'id',
             'rating',
             'comment',
+            'is_visible',
             'user_display_name',
             'createdAt',
             'updatedAt',
         ]
-        read_only_fields = ['id', 'user_display_name', 'createdAt', 'updatedAt']
+        read_only_fields = [
+            'id',
+            'is_visible',
+            'user_display_name',
+            'createdAt',
+            'updatedAt',
+        ]
 
     def get_user_display_name(self, obj):
         profile = getattr(obj.user, 'profile', None)
@@ -181,6 +262,44 @@ class ProductReviewSerializer(serializers.ModelSerializer):
         if value < 1 or value > 5:
             raise serializers.ValidationError('Rating must be between 1 and 5.')
         return value
+
+
+class BusinessProductReviewSerializer(serializers.ModelSerializer):
+    product = ProdctSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+    user_display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductReview
+        fields = [
+            'id',
+            'product',
+            'user',
+            'rating',
+            'comment',
+            'is_visible',
+            'user_display_name',
+            'createdAt',
+            'updatedAt',
+        ]
+        read_only_fields = [
+            'id',
+            'product',
+            'user',
+            'rating',
+            'comment',
+            'user_display_name',
+            'createdAt',
+            'updatedAt',
+        ]
+
+    def get_user_display_name(self, obj):
+        profile = getattr(obj.user, 'profile', None)
+        if profile and profile.display_name:
+            return profile.display_name
+        if profile and profile.full_name:
+            return profile.full_name
+        return obj.user.username
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -204,6 +323,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = [
             'username',
             'email',
+            'role',
             'full_name',
             'display_name',
             'phone_number',
@@ -225,6 +345,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'occupation_school',
             'social_links',
         ]
+        read_only_fields = ['role']
 
     def get_security_answer_configured(self, obj):
         return bool(obj.security_answer_hash)
@@ -337,6 +458,117 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class MeSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    profile = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'email',
+            'is_active',
+            'is_staff',
+            'is_superuser',
+            'role',
+            'profile',
+        ]
+
+    def get_role(self, obj):
+        if obj.is_superuser:
+            return 'superuser'
+        profile, _ = UserProfile.objects.get_or_create(user=obj)
+        return profile.role
+
+    def get_profile(self, obj):
+        profile, _ = UserProfile.objects.get_or_create(user=obj)
+        return {
+            'full_name': profile.full_name,
+            'display_name': profile.display_name,
+            'profile_photo': profile.profile_photo.url
+            if profile.profile_photo
+            else None,
+        }
+
+
+class BusinessCustomerSerializer(serializers.ModelSerializer):
+    role = serializers.CharField(source='profile.role', read_only=True)
+    full_name = serializers.CharField(source='profile.full_name', read_only=True)
+    display_name = serializers.CharField(
+        source='profile.display_name',
+        read_only=True,
+    )
+    phone_number = serializers.CharField(
+        source='profile.phone_number',
+        read_only=True,
+    )
+    country = serializers.CharField(source='profile.country', read_only=True)
+    city_province = serializers.CharField(
+        source='profile.city_province',
+        read_only=True,
+    )
+    order_count = serializers.SerializerMethodField()
+    total_spent = serializers.SerializerMethodField()
+    review_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'email',
+            'is_active',
+            'role',
+            'full_name',
+            'display_name',
+            'phone_number',
+            'country',
+            'city_province',
+            'order_count',
+            'total_spent',
+            'review_count',
+        ]
+        read_only_fields = [
+            'id',
+            'username',
+            'email',
+            'role',
+            'full_name',
+            'display_name',
+            'phone_number',
+            'country',
+            'city_province',
+            'order_count',
+            'total_spent',
+            'review_count',
+        ]
+
+    def get_order_count(self, obj):
+        owned_product_ids = self.context.get('owned_product_ids')
+        if owned_product_ids is not None:
+            return obj.orders.filter(items__product_id__in=owned_product_ids).distinct().count()
+        return obj.orders.count()
+
+    def get_total_spent(self, obj):
+        owned_product_ids = self.context.get('owned_product_ids')
+        if owned_product_ids is not None:
+            value = OrderItem.objects.filter(
+                order__user=obj,
+                product_id__in=owned_product_ids,
+            ).aggregate(total=Sum('line_total'))['total']
+            return str(value or Decimal('0.00'))
+
+        value = obj.orders.aggregate(total=Sum('total_amount'))['total']
+        return str(value or Decimal('0.00'))
+
+    def get_review_count(self, obj):
+        owned_product_ids = self.context.get('owned_product_ids')
+        if owned_product_ids is not None:
+            return obj.reviews.filter(product_id__in=owned_product_ids).count()
+        return obj.reviews.count()
 
 
 class ProfilePhotoSerializer(serializers.ModelSerializer):

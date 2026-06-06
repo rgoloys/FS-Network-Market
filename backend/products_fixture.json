@@ -12,7 +12,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -28,7 +29,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -44,7 +46,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -60,7 +63,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -76,7 +80,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -92,7 +97,8 @@
       "createdAt": "2025-06-26",
       "category": "Router",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -108,7 +114,8 @@
       "createdAt": "2025-06-26",
       "category": "Router",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -124,7 +131,8 @@
       "createdAt": "2025-06-26",
       "category": "Router",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -140,7 +148,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -156,7 +165,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": true,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -172,7 +182,8 @@
       "createdAt": "2025-06-26",
       "category": "Network Hardware",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -188,7 +199,8 @@
       "createdAt": "2025-06-26",
       "category": "Network Hardware",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -204,7 +216,8 @@
       "createdAt": "2025-06-26",
       "category": "Network Hardware",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -220,7 +233,8 @@
       "createdAt": "2025-06-26",
       "category": "Wireless Access Point",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -236,7 +250,8 @@
       "createdAt": "2025-06-26",
       "category": "Wireless Access Point",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -252,7 +267,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -268,7 +284,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -284,7 +301,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -300,7 +318,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -316,7 +335,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -332,7 +352,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -348,7 +369,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -364,7 +386,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -380,7 +403,8 @@
       "createdAt": "2025-06-26",
       "category": "Firewall",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -396,7 +420,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -412,7 +437,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -428,7 +454,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -444,7 +471,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -460,7 +488,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -476,7 +505,8 @@
       "createdAt": "2025-06-26",
       "category": "Switch",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -492,7 +522,8 @@
       "createdAt": "2025-06-26",
       "category": "Wireless Access Point",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -508,7 +539,8 @@
       "createdAt": "2025-06-26",
       "category": "Wireless Access Point",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -524,7 +556,8 @@
       "createdAt": "2025-06-26",
       "category": "Wireless Access Point",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   },
   {
@@ -540,7 +573,8 @@
       "createdAt": "2025-06-26",
       "category": "Wireless Access Point",
       "is_featured": false,
-      "discount_percent": 0
+      "discount_percent": 0,
+      "is_active": true
     }
   }
 ]

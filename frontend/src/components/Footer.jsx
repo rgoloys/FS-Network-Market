@@ -1,24 +1,36 @@
 import { useContext } from "react";
 import { Link } from "react-router-dom";
+import { BASE_URL } from "../api/base";
 import marketLogo from "../assets/fs-network-market-logo.svg";
 import { AuthContext } from "../context/AuthContext";
 
 const socialLinks = ["X", "In", "Fb"];
 
 const Footer = () => {
-  const { isAuthenticated } = useContext(AuthContext);
-  const accountLinks = isAuthenticated
-    ? [
-        { label: "Profile", to: "/profile" },
-        { label: "Wishlist", to: "/wishlist" },
-        { label: "Orders", to: "/orders" },
-        { label: "Cart", to: "/cart" },
-      ]
-    : [
-        { label: "Log in", to: "/login" },
-        { label: "Register", to: "/register" },
-        { label: "Cart", to: "/cart" },
-      ];
+  const { isAuthenticated, isBusinessUser, isSuperuser } =
+    useContext(AuthContext);
+  const accountLinks = isSuperuser
+    ? [{ external: true, label: "Django admin", to: `${BASE_URL}admin/` }]
+    : isBusinessUser
+      ? [
+          { label: "Dashboard", to: "/business-dashboard" },
+          { label: "Products", to: "/business-dashboard/products" },
+          { label: "Orders", to: "/business-dashboard/orders" },
+          { label: "Customers", to: "/business-dashboard/customers" },
+          { label: "Reviews", to: "/business-dashboard/reviews" },
+        ]
+      : isAuthenticated
+        ? [
+            { label: "Profile", to: "/profile" },
+            { label: "Wishlist", to: "/wishlist" },
+            { label: "Orders", to: "/orders" },
+            { label: "Cart", to: "/cart" },
+          ]
+        : [
+            { label: "Log in", to: "/login" },
+            { label: "Register", to: "/register" },
+            { label: "Cart", to: "/cart" },
+          ];
 
   return (
     <footer className="box-border w-full bg-[#111111] px-16 pb-8 pt-16 font-sans text-white max-[960px]:px-7 max-[960px]:pt-14 max-[560px]:px-4 max-[560px]:pb-6 max-[560px]:pt-12">
@@ -47,13 +59,23 @@ const Footer = () => {
               className="flex flex-wrap items-center gap-3"
             >
               {accountLinks.map((link) => (
-                <Link
-                  className="button-hover inline-flex min-h-10 items-center rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold leading-none text-white no-underline hover:bg-white/15"
-                  key={link.to}
-                  to={link.to}
-                >
-                  {link.label}
-                </Link>
+                link.external ? (
+                  <a
+                    className="button-hover inline-flex min-h-10 items-center rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold leading-none text-white no-underline hover:bg-white/15"
+                    href={link.to}
+                    key={link.to}
+                  >
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link
+                    className="button-hover inline-flex min-h-10 items-center rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold leading-none text-white no-underline hover:bg-white/15"
+                    key={link.to}
+                    to={link.to}
+                  >
+                    {link.label}
+                  </Link>
+                )
               ))}
             </nav>
           </div>

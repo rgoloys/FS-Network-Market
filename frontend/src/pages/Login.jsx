@@ -7,7 +7,7 @@ import Header from "../components/Header";
 import { AuthContext } from "../context/AuthContext";
 
 const Login = () => {
-  const { setIsAuthenticated } = useContext(AuthContext);
+  const { refreshCurrentUser } = useContext(AuthContext);
   const location = useLocation();
   const navigate = useNavigate();
   const [error, setError] = useState("");
@@ -31,8 +31,27 @@ const Login = () => {
 
       localStorage.setItem("accessToken", response.data.access);
       localStorage.setItem("refreshToken", response.data.refresh);
-      setIsAuthenticated(true);
-      navigate(location.state?.from ?? "/products");
+      const currentUser = await refreshCurrentUser();
+
+      if (currentUser?.is_superuser) {
+        window.location.assign(`${BASE_URL}admin/`);
+        return;
+      }
+
+      if (currentUser?.role === "business_admin") {
+        const destination = location.state?.from?.startsWith(
+          "/business-dashboard",
+        )
+          ? location.state.from
+          : "/business-dashboard";
+        navigate(destination);
+        return;
+      }
+
+      const destination = location.state?.from?.startsWith("/business-dashboard")
+        ? "/products"
+        : location.state?.from ?? "/products";
+      navigate(destination);
     } catch (err) {
       const apiMessage =
         err.response?.data?.detail || "Invalid username or password.";

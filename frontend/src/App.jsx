@@ -1,6 +1,11 @@
 import { useContext } from "react";
 import { Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
+import BusinessCustomers from "./pages/BusinessCustomers";
+import BusinessDashboard from "./pages/BusinessDashboard";
+import BusinessOrders from "./pages/BusinessOrders";
+import BusinessProducts from "./pages/BusinessProducts";
+import BusinessReviews from "./pages/BusinessReviews";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import LandingPage from "./pages/LandingPage";
@@ -11,16 +16,21 @@ import ProductDetails from "./pages/ProductDetails";
 import Products from "./pages/Products";
 import Register from "./pages/Register";
 import Profile from "./pages/Profile";
+import SuperuserAdmin from "./pages/SuperuserAdmin";
 import Wishlist from "./pages/Wishlist";
 import Loading from "./components/Loading";
 import { AuthContext } from "./context/AuthContext";
 import { AuthProvider } from "./context/AuthProvider";
+import { BusinessRoute } from "./context/BusinessRoute";
 import { PrivateRoute } from "./context/PrivateRoute";
 
 const HomeRoute = () => {
-  const { isAuthenticated, isLoading } = useContext(AuthContext);
+  const { isAuthenticated, isBusinessUser, isLoading, isSuperuser } =
+    useContext(AuthContext);
 
   if (isLoading) return <Loading />;
+  if (isSuperuser) return <SuperuserAdmin />;
+  if (isBusinessUser) return <BusinessDashboard />;
   return isAuthenticated ? <Home /> : <LandingPage />;
 };
 
@@ -73,6 +83,47 @@ function App() {
         />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/superuser-admin" element={<SuperuserAdmin />} />
+        <Route
+          path="/business-dashboard"
+          element={
+            <BusinessRoute>
+              <BusinessDashboard />
+            </BusinessRoute>
+          }
+        />
+        <Route
+          path="/business-dashboard/products"
+          element={
+            <BusinessRoute>
+              <BusinessProducts />
+            </BusinessRoute>
+          }
+        />
+        <Route
+          path="/business-dashboard/orders"
+          element={
+            <BusinessRoute>
+              <BusinessOrders />
+            </BusinessRoute>
+          }
+        />
+        <Route
+          path="/business-dashboard/customers"
+          element={
+            <BusinessRoute>
+              <BusinessCustomers />
+            </BusinessRoute>
+          }
+        />
+        <Route
+          path="/business-dashboard/reviews"
+          element={
+            <BusinessRoute>
+              <BusinessReviews />
+            </BusinessRoute>
+          }
+        />
         <Route
           path="/profile"
           element={

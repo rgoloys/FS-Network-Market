@@ -1,9 +1,18 @@
 from django.contrib.auth.models import User
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 
 class Prodct(models.Model):
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='business_products',
+    )
     product_name = models.CharField(max_length=255)
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     brand = models.CharField(max_length=255)
@@ -12,6 +21,7 @@ class Prodct(models.Model):
     countInStock = models.IntegerField(default=0)
     image = models.ImageField(upload_to='product_images/', null=True, blank=True)
     is_featured = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     discount_percent = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -91,6 +101,20 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
+    FULFILLMENT_PENDING = 'pending'
+    FULFILLMENT_PROCESSING = 'processing'
+    FULFILLMENT_SHIPPED = 'shipped'
+    FULFILLMENT_DELIVERED = 'delivered'
+    FULFILLMENT_CANCELLED = 'cancelled'
+
+    FULFILLMENT_STATUS_CHOICES = [
+        (FULFILLMENT_PENDING, 'Pending'),
+        (FULFILLMENT_PROCESSING, 'Processing'),
+        (FULFILLMENT_SHIPPED, 'Shipped'),
+        (FULFILLMENT_DELIVERED, 'Delivered'),
+        (FULFILLMENT_CANCELLED, 'Cancelled'),
+    ]
+
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Prodct, on_delete=models.PROTECT)
     product_name = models.CharField(max_length=255)
@@ -98,6 +122,11 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     qty = models.PositiveIntegerField()
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
+    fulfillment_status = models.CharField(
+        max_length=20,
+        choices=FULFILLMENT_STATUS_CHOICES,
+        default=FULFILLMENT_PENDING,
+    )
 
     def __str__(self):
         return f'{self.product_name} x {self.qty}'
@@ -127,6 +156,7 @@ class ProductReview(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
     comment = models.TextField(blank=True)
+    is_visible = models.BooleanField(default=True)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
 
@@ -143,6 +173,14 @@ class ProductReview(models.Model):
 
 
 class UserProfile(models.Model):
+    ROLE_BUYER = 'buyer'
+    ROLE_BUSINESS_ADMIN = 'business_admin'
+
+    ROLE_CHOICES = [
+        (ROLE_BUYER, 'Buyer'),
+        (ROLE_BUSINESS_ADMIN, 'Business admin'),
+    ]
+
     GENDER_CHOICES = [
         ('female', 'Female'),
         ('male', 'Male'),
@@ -155,6 +193,11 @@ class UserProfile(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='profile',
+    )
+    role = models.CharField(
+        max_length=30,
+        choices=ROLE_CHOICES,
+        default=ROLE_BUYER,
     )
     full_name = models.CharField(max_length=255, blank=True)
     display_name = models.CharField(max_length=150, blank=True)
@@ -181,3 +224,9 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f'{self.user.username} profile'
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
