@@ -1,6 +1,8 @@
 import base64
 import json
+import logging
 import os
+import re
 import urllib.error
 import urllib.request
 import uuid
@@ -48,6 +50,9 @@ from .serializers import (
 
 MONEY_QUANTIZER = Decimal('0.01')
 XENDIT_INVOICE_URL = 'https://api.xendit.co/v2/invoices'
+XENDIT_PAID_STATUSES = {'PAID', 'SETTLED', 'SUCCEEDED', 'COMPLETED'}
+XENDIT_FAILED_STATUSES = {'EXPIRED', 'FAILED', 'CANCELLED'}
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_qty(value):
@@ -388,11 +393,154 @@ def get_xendit_invoice_payload(data):
     return data if isinstance(data, dict) else {}
 
 
-def create_xendit_invoice(payment, order):
+def get_xendit_secret_key():
     secret_key = os.getenv('XENDIT_SECRET_KEY', '').strip()
     if not secret_key:
         raise RuntimeError('Xendit secret key is not configured.')
+    return secret_key
 
+
+def get_xendit_auth_token():
+    return base64.b64encode(f'{get_xendit_secret_key()}:'.encode('utf-8')).decode(
+        'utf-8'
+    )
+
+
+def read_xendit_json(request):
+    with urllib.request.urlopen(request, timeout=20) as response:
+        response_body = response.read().decode('utf-8')
+        return json.loads(response_body)
+
+
+def flatten_xendit_dicts(value):
+    if isinstance(value, dict):
+        dicts = [value]
+        for child in value.values():
+            dicts.extend(flatten_xendit_dicts(child))
+        return dicts
+    if isinstance(value, list):
+        dicts = []
+        for child in value:
+            dicts.extend(flatten_xendit_dicts(child))
+        return dicts
+    return []
+
+
+def clean_xendit_value(value):
+    if value in (None, ''):
+        return ''
+    if isinstance(value, (dict, list)):
+        return ''
+    return str(value).strip()
+
+
+def append_unique(values, value):
+    value = clean_xendit_value(value)
+    if value and value not in values:
+        values.append(value)
+
+
+def collect_xendit_webhook_candidates(data):
+    dicts = flatten_xendit_dicts(data)
+    external_keys = {
+        'external_id',
+        'reference_id',
+        'xendit_external_id',
+        'merchant_reference_id',
+    }
+    invoice_keys = {
+        'invoice_id',
+        'invoiceId',
+        'payment_id',
+        'payment_request_id',
+    }
+    generic_keys = {'id'}
+    status_keys = {'status', 'payment_status'}
+
+    external_ids = []
+    invoice_ids = []
+    generic_ids = []
+    statuses = []
+    order_ids = []
+
+    for item in dicts:
+        for key, value in item.items():
+            if key in external_keys:
+                append_unique(external_ids, value)
+            elif key in invoice_keys:
+                append_unique(invoice_ids, value)
+            elif key in generic_keys:
+                if any(
+                    field in item
+                    for field in [
+                        'status',
+                        'payment_status',
+                        'external_id',
+                        'reference_id',
+                        'invoice_url',
+                        'amount',
+                    ]
+                ):
+                    append_unique(generic_ids, value)
+            elif key in status_keys:
+                append_unique(statuses, value)
+            elif key == 'order_id':
+                append_unique(order_ids, value)
+
+    all_ids = []
+    for value in external_ids + invoice_ids + generic_ids:
+        append_unique(all_ids, value)
+        match = re.search(r'fs-network-order-(\d+)-', value)
+        if match:
+            append_unique(order_ids, match.group(1))
+
+    return {
+        'external_ids': external_ids,
+        'invoice_ids': invoice_ids,
+        'generic_ids': generic_ids,
+        'all_ids': all_ids,
+        'order_ids': order_ids,
+        'statuses': statuses,
+    }
+
+
+def get_xendit_status_from_candidates(candidates):
+    for status_value in candidates['statuses']:
+        normalized = status_value.upper()
+        if normalized:
+            return normalized
+    return ''
+
+
+def find_payment_from_xendit_candidates(candidates):
+    payment_query = paymentMethod.objects.select_related('order')
+
+    for external_id in candidates['external_ids']:
+        payment = payment_query.filter(xendit_external_id=external_id).first()
+        if payment:
+            return payment, 'xendit_external_id', external_id
+
+    for invoice_id in candidates['invoice_ids']:
+        payment = payment_query.filter(xendit_invoice_id=invoice_id).first()
+        if payment:
+            return payment, 'xendit_invoice_id', invoice_id
+
+    for candidate_id in candidates['all_ids']:
+        payment = payment_query.filter(
+            Q(xendit_external_id=candidate_id) | Q(xendit_invoice_id=candidate_id)
+        ).first()
+        if payment:
+            return payment, 'candidate_id', candidate_id
+
+    for order_id in candidates['order_ids']:
+        payment = payment_query.filter(order_id=order_id).first()
+        if payment:
+            return payment, 'order_id', order_id
+
+    return None, '', ''
+
+
+def create_xendit_invoice(payment, order):
     frontend_base_url = get_frontend_base_url()
     payload = {
         'external_id': payment.xendit_external_id,
@@ -407,21 +555,29 @@ def create_xendit_invoice(payment, order):
         ),
     }
     body = json.dumps(payload).encode('utf-8')
-    auth_token = base64.b64encode(f'{secret_key}:'.encode('utf-8')).decode('utf-8')
     request = urllib.request.Request(
         XENDIT_INVOICE_URL,
         data=body,
         method='POST',
         headers={
-            'Authorization': f'Basic {auth_token}',
+            'Authorization': f'Basic {get_xendit_auth_token()}',
             'Content-Type': 'application/json',
             'Accept': 'application/json',
         },
     )
+    return read_xendit_json(request)
 
-    with urllib.request.urlopen(request, timeout=20) as response:
-        response_body = response.read().decode('utf-8')
-        return json.loads(response_body)
+
+def get_xendit_invoice(invoice_id):
+    request = urllib.request.Request(
+        f'{XENDIT_INVOICE_URL}/{invoice_id}',
+        method='GET',
+        headers={
+            'Authorization': f'Basic {get_xendit_auth_token()}',
+            'Accept': 'application/json',
+        },
+    )
+    return read_xendit_json(request)
 
 
 def restore_order_stock_once(order):
@@ -637,37 +793,87 @@ def xendit_webhook(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    payload = get_xendit_invoice_payload(request.data)
-    external_id = payload.get('external_id', '')
-    invoice_id = payload.get('id') or payload.get('invoice_id') or ''
-    xendit_status_value = str(payload.get('status', '')).upper()
+    payload = request.data if isinstance(request.data, dict) else {}
+    invoice_payload = get_xendit_invoice_payload(payload)
+    candidates = collect_xendit_webhook_candidates(payload)
+    payment, matched_by, matched_value = find_payment_from_xendit_candidates(
+        candidates
+    )
+    xendit_status_value = get_xendit_status_from_candidates(candidates)
 
-    payment_query = paymentMethod.objects.select_related('order')
-    payment = None
-    if external_id:
-        payment = payment_query.filter(xendit_external_id=external_id).first()
-    if payment is None and invoice_id:
-        payment = payment_query.filter(xendit_invoice_id=invoice_id).first()
+    LOGGER.info(
+        'Xendit webhook received status=%s candidates=%s matched_payment=%s matched_by=%s',
+        xendit_status_value,
+        candidates,
+        payment.id if payment else None,
+        matched_by,
+    )
+
     if payment is None:
-        return Response({'message': 'Payment record not found.'})
+        return Response(
+            {
+                'message': 'Payment record not found.',
+                'received_status': xendit_status_value,
+                'candidate_ids': candidates['all_ids'],
+                'order_ids': candidates['order_ids'],
+            }
+        )
 
-    if invoice_id and not payment.xendit_invoice_id:
-        payment.xendit_invoice_id = invoice_id
-        payment.save(update_fields=['xendit_invoice_id'])
+    invoice_ids = candidates['invoice_ids'] + candidates['generic_ids']
+    for invoice_id in invoice_ids:
+        if invoice_id and not payment.xendit_invoice_id:
+            payment.xendit_invoice_id = invoice_id
+            payment.save(update_fields=['xendit_invoice_id'])
+            break
 
-    if xendit_status_value in ['PAID', 'SETTLED']:
+    if xendit_status_value in XENDIT_PAID_STATUSES:
         payment.mark_paid()
-        return Response({'message': 'Payment marked as paid.'})
+        LOGGER.info(
+            'Xendit webhook marked payment paid payment_id=%s order_id=%s matched_by=%s matched_value=%s',
+            payment.id,
+            payment.order_id,
+            matched_by,
+            matched_value,
+        )
+        return Response(
+            {
+                'message': 'Payment marked as paid.',
+                'payment_id': payment.id,
+                'order_id': payment.order_id,
+                'matched_by': matched_by,
+            }
+        )
 
-    if xendit_status_value in ['EXPIRED', 'FAILED', 'CANCELLED']:
+    if xendit_status_value in XENDIT_FAILED_STATUSES:
         close_failed_payment(payment, xendit_status_value)
-        return Response({'message': 'Payment closed.'})
+        LOGGER.info(
+            'Xendit webhook closed payment payment_id=%s order_id=%s status=%s',
+            payment.id,
+            payment.order_id,
+            xendit_status_value,
+        )
+        return Response(
+            {
+                'message': 'Payment closed.',
+                'payment_id': payment.id,
+                'order_id': payment.order_id,
+                'status': xendit_status_value,
+            }
+        )
 
     if xendit_status_value:
         payment.xendit_status = xendit_status_value
         payment.save(update_fields=['xendit_status'])
 
-    return Response({'message': 'Webhook processed.'})
+    return Response(
+        {
+            'message': 'Webhook processed.',
+            'payment_id': payment.id,
+            'order_id': payment.order_id,
+            'status': payment.xendit_status,
+            'payload_keys': list(invoice_payload.keys()),
+        }
+    )
 
 
 @api_view(['GET', 'POST'])

@@ -12,8 +12,10 @@ urlpatterns = [
     path('cart/remove/<int:pk>/', views.remove_from_cart, name='remove-from-cart'),
     path('orders/', views.orders, name='orders'),
     path('orders/<int:pk>/', views.order_detail, name='order-detail'),
+
     path('payments/xendit/checkout/', views.xendit_checkout, name='xendit-checkout'),
     path('payments/xendit/webhook/', views.xendit_webhook, name='xendit-webhook'),
+
     path('wishlist/', views.wishlist, name='wishlist'),
     path('wishlist/<int:product_id>/', views.remove_wishlist_item, name='remove-wishlist-item'),
     path('me/', views.me, name='me'),
